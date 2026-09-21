@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api from "../services/api";
 
 function Dashboard() {
@@ -10,25 +10,94 @@ function Dashboard() {
   const [notes, setNotes] = useState("");
   const [quiz, setQuiz] = useState("");
   const [studyPlan, setStudyPlan] =
-  useState("");
+    useState("");
+
+  const [history, setHistory] =
+    useState([]);
+
+  const [selectedContent, setSelectedContent] =
+    useState("");
+
   const [loading, setLoading] =
     useState(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    window.location.href = "/";
+  };
+
+  const fetchHistory = async () => {
+    try {
+      const response =
+        await api.get(
+          "/study/history"
+        );
+
+      setHistory(
+        response.data
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleViewHistory = async (id) => {
+    try {
+      const response =
+        await api.get(
+          `/study/history/${id}`
+        );
+
+      setSelectedContent(
+        response.data.content
+      );
+
+    } catch (error) {
+      console.log(error);
+      alert("Failed to load content");
+    }
+  };
+
+  const handleDeleteHistory = async (id) => {
+    try {
+      await api.delete(
+        `/study/history/${id}`
+      );
+
+      alert("Deleted successfully");
+
+      setSelectedContent("");
+
+      fetchHistory();
+
+    } catch (error) {
+      console.log(error);
+      alert("Delete failed");
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   const handleExplain = async () => {
     try {
       setLoading(true);
 
-      const response = await api.post(
-        "/ai/explain",
-        {
-          topic,
-          difficulty,
-        }
-      );
+      const response =
+        await api.post(
+          "/ai/explain",
+          {
+            topic,
+            difficulty,
+          }
+        );
 
       setResult(
         response.data.explanation
       );
+
+      fetchHistory();
 
     } catch (error) {
       console.log(error);
@@ -42,17 +111,20 @@ function Dashboard() {
     try {
       setLoading(true);
 
-      const response = await api.post(
-        "/ai/notes",
-        {
-          topic,
-          difficulty,
-        }
-      );
+      const response =
+        await api.post(
+          "/ai/notes",
+          {
+            topic,
+            difficulty,
+          }
+        );
 
       setNotes(
         response.data.notes
       );
+
+      fetchHistory();
 
     } catch (error) {
       console.log(error);
@@ -61,58 +133,71 @@ function Dashboard() {
       setLoading(false);
     }
   };
+
   const handleQuiz = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const response =
-      await api.post(
-        "/ai/quiz",
-        {
-          topic,
-          difficulty,
-        }
+      const response =
+        await api.post(
+          "/ai/quiz",
+          {
+            topic,
+            difficulty,
+          }
+        );
+
+      setQuiz(
+        response.data.quiz
       );
 
-    setQuiz(
-      response.data.quiz
-    );
+      fetchHistory();
 
-  } catch (error) {
-    console.log(error);
-    alert("Quiz Error");
-  } finally {
-    setLoading(false);
-  }
-};
+    } catch (error) {
+      console.log(error);
+      alert("Quiz Error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const handleStudyPlan = async () => {
-  try {
-    setLoading(true);
+  const handleStudyPlan = async () => {
+    try {
+      setLoading(true);
 
-    const response =
-      await api.post(
-        "/ai/study-plan",
-        {
-          topic,
-          difficulty,
-        }
+      const response =
+        await api.post(
+          "/ai/study-plan",
+          {
+            topic,
+            difficulty,
+          }
+        );
+
+      setStudyPlan(
+        response.data.studyPlan
       );
 
-    setStudyPlan(
-      response.data.studyPlan
-    );
+      fetchHistory();
 
-  } catch (error) {
-    console.log(error);
-    alert("Study Plan Error");
-  } finally {
-    setLoading(false);
-  }
-};
+    } catch (error) {
+      console.log(error);
+      alert("Study Plan Error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       <h1>AI Study Assistant</h1>
+
+      <button onClick={handleLogout}>
+        Logout
+      </button>
+
+      <br />
+      <br />
 
       <input
         type="text"
@@ -175,36 +260,80 @@ const handleStudyPlan = async () => {
       ) : (
         <>
           <h2>Explanation</h2>
-
-          <pre>
-            {result}
-          </pre>
+          <pre>{result}</pre>
 
           <hr />
 
           <h2>Study Notes</h2>
-
-          <pre>
-            {notes}
-          </pre>
+          <pre>{notes}</pre>
 
           <hr />
 
           <h2>Quiz</h2>
-
-          <pre>
-            {quiz}
-          </pre>
+          <pre>{quiz}</pre>
 
           <hr />
 
           <h2>Study Plan</h2>
-
-          <pre>
-            {studyPlan}
-          </pre>
+          <pre>{studyPlan}</pre>
         </>
       )}
+
+      <hr />
+
+      <h2>Study History</h2>
+
+      {history.length === 0 ? (
+        <p>
+          No study history yet.
+        </p>
+      ) : (
+        <ul>
+          {history.map((item) => (
+            <li key={item.id}>
+              <strong>
+                {item.topic}
+              </strong>
+              {" - "}
+              {item.content_type}
+              {" - "}
+              {item.difficulty}
+
+              {" "}
+
+              <button
+                onClick={() =>
+                  handleViewHistory(
+                    item.id
+                  )
+                }
+              >
+                View
+              </button>
+
+              {" "}
+
+              <button
+                onClick={() =>
+                  handleDeleteHistory(
+                    item.id
+                  )
+                }
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <hr />
+
+      <h2>Saved Content</h2>
+
+      <pre>
+        {selectedContent}
+      </pre>
     </div>
   );
 }
