@@ -1,14 +1,13 @@
 import "./Dashboard.css";
+
 import { useEffect, useState } from "react";
+
 import { useNavigate } from "react-router-dom";
+
 import api from "../services/api";
 
 function Dashboard() {
   const navigate = useNavigate();
-
-  // =========================
-  // STUDY STATES
-  // =========================
 
   const [topic, setTopic] = useState("");
   const [difficulty, setDifficulty] = useState("Beginner");
@@ -18,355 +17,252 @@ function Dashboard() {
   const [quiz, setQuiz] = useState("");
   const [studyPlan, setStudyPlan] = useState("");
 
-  // =========================
-  // CHAT STATES
-  // =========================
-
   const [chatMessages, setChatMessages] = useState([]);
   const [chatMessage, setChatMessage] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
 
-  // =========================
-  // HISTORY STATES
-  // =========================
-
-  const [history, setHistory] = useState([]);
   const [selectedContent, setSelectedContent] = useState(null);
-
-  // =========================
-  // CONVERSATION STATES
-  // =========================
 
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] =
     useState(null);
 
-  // =========================
-  // GENERAL LOADING
-  // =========================
+  // Stores which AI tool is currently generating.
+  // null = no AI tool is generating.
+  const [loading, setLoading] = useState(null);
 
-  const [loading, setLoading] = useState(false);
+  // Mobile sidebar drawer
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // =========================
-  // FETCH STUDY HISTORY
-  // =========================
+  // Conversation delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const fetchHistory = async () => {
-    try {
-      const response = await api.get("/study/history");
-
-      setHistory(response.data);
-    } catch (error) {
-      console.log("FETCH HISTORY ERROR:", error);
-
-      if (error.response?.status === 401) {
-        localStorage.removeItem("token");
-        navigate("/");
-      }
-    }
-  };
-
-  // =========================
   // FETCH CONVERSATIONS
-  // =========================
-
   const fetchConversations = async () => {
     try {
       const response = await api.get("/conversations");
-
-      setConversations(response.data);
+      setConversations(response.data || []);
     } catch (error) {
-      console.log(
-        "FETCH CONVERSATIONS ERROR:",
+      console.error(
+        "Failed to fetch conversations:",
         error
       );
-
-      if (error.response?.status === 401) {
-        localStorage.removeItem("token");
-        navigate("/");
-      }
     }
   };
 
-  // =========================
   // FETCH CHAT MESSAGES
-  // =========================
-
   const fetchMessages = async (conversationId) => {
     try {
       const response = await api.get(
         `/chat/${conversationId}`
       );
 
-      setChatMessages(response.data);
-
+      setChatMessages(response.data || []);
     } catch (error) {
-      console.log(
-        "FETCH CHAT MESSAGES ERROR:",
+      console.error(
+        "Failed to fetch chat messages:",
+        error
+      );
+
+      setChatMessages([]);
+    }
+  };
+
+  useEffect(() => {
+  const loadConversations = async () => {
+    try {
+      const response = await api.get("/conversations");
+      setConversations(response.data || []);
+    } catch (error) {
+      console.error(
+        "Failed to fetch conversations:",
         error
       );
     }
   };
 
-  // =========================
-  // INITIAL LOAD
-  // =========================
+  loadConversations();
+}, []);
 
-  useEffect(() => {
-    fetchHistory();
-    fetchConversations();
-  }, []);
-
-  // =========================
-  // CLEAR CURRENT CONTENT
-  // =========================
-
+  // CLEAR CURRENT STUDY CONTENT
   const clearCurrentContent = () => {
     setResult("");
     setNotes("");
     setQuiz("");
     setStudyPlan("");
-
     setSelectedContent(null);
-
     setChatMessages([]);
     setChatMessage("");
   };
 
-  // =========================
-  // NEW CONVERSATION
-  // =========================
-
+  // NEW STUDY
   const handleNewConversation = () => {
     setSelectedConversation(null);
+    setTopic("");
+    setDifficulty("Beginner");
 
     clearCurrentContent();
 
-    setTopic("");
-    setDifficulty("Beginner");
+    setSidebarOpen(false);
   };
 
-  // =========================
-  // CREATE SMART TITLE
-  // =========================
-
+  // CREATE SMART CONVERSATION TITLE
   const createConversationTitle = (text) => {
-    if (!text || !text.trim()) {
+    let title = text.trim();
+
+    if (!title) {
       return "New Study";
     }
 
-    let title = text.trim();
-
-    // Difference between X and Y
-    const differenceMatch = title.match(
-      /difference\s+between\s+(.+?)\s+and\s+(.+?)(?:\?|\.|$)/i
-    );
-
-    if (differenceMatch) {
-      const firstTopic =
-        differenceMatch[1].trim();
-
-      const secondTopic =
-        differenceMatch[2].trim();
-
-      return `${firstTopic} vs ${secondTopic}`;
-    }
-
-    // Remove polite phrases
-    title = title.replace(
-      /^(can you|could you|please|would you)\s+/i,
-      ""
-    );
-
-    // Remove explanation phrases
-    title = title.replace(
-      /^(explain|tell me about|teach me about)\s+/i,
-      ""
-    );
-
-    // Remove question phrases
-    title = title.replace(
-      /^(what is|what are|who is|who are|why is|why are|how does|how do|how can|how to)\s+/i,
-      ""
-    );
-
-    // Remove request phrases
-    title = title.replace(
-      /^(give me|show me)\s+/i,
-      ""
-    );
-
-    // Remove punctuation
     title = title
-      .replace(/[?.!]+$/, "")
+      .replace(
+        /^(can you|could you|please|help me|tell me|explain)\s+/i,
+        ""
+      )
+      .replace(/[?!.]+$/, "")
       .trim();
 
-    // Remove common ending phrases
-    title = title.replace(
-      /\s+(in simple terms|in simple words|simply|with examples|and give me examples)$/i,
-      ""
+    const comparisonMatch = title.match(
+      /^difference between (.+?) and (.+)$/i
     );
 
-    title = title.trim();
-
-    if (!title) {
-      title = text.trim();
+    if (comparisonMatch) {
+      title = `${comparisonMatch[1]} vs ${comparisonMatch[2]}`;
     }
 
-    // Capitalize first letter
-    title =
-      title.charAt(0).toUpperCase() +
-      title.slice(1);
-
-    // Limit title length
     if (title.length > 35) {
-      title =
-        title.substring(0, 35).trim() +
-        "...";
+      title = `${title.substring(0, 32).trim()}...`;
     }
 
-    return title;
+    return (
+      title.charAt(0).toUpperCase() +
+      title.slice(1)
+    );
   };
 
-  // =========================
   // GET OR CREATE CONVERSATION
-  // =========================
-
-  const getOrCreateConversation = async (
-    titleText
-  ) => {
-    // If already inside a conversation,
-    // use the existing conversation.
+  const getOrCreateConversation = async (titleText) => {
     if (selectedConversation) {
       return selectedConversation;
     }
 
-    const title =
-      createConversationTitle(titleText);
+    try {
+      const response = await api.post(
+        "/conversations",
+        {
+          title: createConversationTitle(titleText),
+        }
+      );
 
-    const response = await api.post(
-      "/conversations",
-      {
-        title,
-      }
-    );
+      const newConversation = response.data;
 
-    const newConversation =
-      response.data;
+      setSelectedConversation(newConversation);
 
-    setConversations((previous) => [
-      newConversation,
-      ...previous,
-    ]);
+      setConversations((previous) => [
+        newConversation,
+        ...previous,
+      ]);
 
-    setSelectedConversation(
-      newConversation
-    );
+      return newConversation;
+    } catch (error) {
+      console.error(
+        "Failed to create conversation:",
+        error
+      );
 
-    return newConversation;
+      throw error;
+    }
   };
 
-  // =========================
   // SELECT CONVERSATION
-  // =========================
-
   const handleSelectConversation = async (
     conversation
   ) => {
     try {
-      setSelectedConversation(
-        conversation
-      );
+      setSelectedConversation(conversation);
+
+      setTopic("");
+      setDifficulty("Beginner");
 
       clearCurrentContent();
 
+      setSidebarOpen(false);
+
+      // Get saved study content for this conversation
       const response = await api.get(
         `/conversations/${conversation.id}`
       );
 
-      const conversationData =
-        response.data;
+      const conversationData = response.data;
 
-      const conversationHistory =
-        conversationData.history || [];
+      if (
+        conversationData.history &&
+        conversationData.history.length > 0
+      ) {
+        const history =
+          conversationData.history;
 
-      // Restore generated content
-      conversationHistory.forEach((item) => {
-        if (
-          item.content_type ===
-          "explanation"
-        ) {
-          setResult(item.content);
-        }
+        // Restore the latest topic and difficulty
+        const latestHistory =
+          history[history.length - 1];
 
-        if (
-          item.content_type === "notes"
-        ) {
-          setNotes(item.content);
-        }
-
-        if (
-          item.content_type === "quiz"
-        ) {
-          setQuiz(item.content);
-        }
-
-        if (
-          item.content_type ===
-          "studyPlan"
-        ) {
-          setStudyPlan(item.content);
-        }
-      });
-
-      // Restore topic from latest study item
-      if (conversationHistory.length > 0) {
-        const latestItem =
-          conversationHistory[
-            conversationHistory.length - 1
-          ];
-
-        setTopic(latestItem.topic || "");
+        setTopic(
+          latestHistory.topic || ""
+        );
 
         setDifficulty(
-          latestItem.difficulty ||
+          latestHistory.difficulty ||
             "Beginner"
         );
+
+        // Restore ALL generated study content
+        history.forEach((item) => {
+          // Backend property is content_type
+          if (
+            item.content_type ===
+            "explanation"
+          ) {
+            setResult(item.content);
+          }
+
+          if (
+            item.content_type === "notes"
+          ) {
+            setNotes(item.content);
+          }
+
+          if (
+            item.content_type === "quiz"
+          ) {
+            setQuiz(item.content);
+          }
+
+          // Backend stores Study Plan as "studyPlan"
+          if (
+            item.content_type ===
+            "studyPlan"
+          ) {
+            setStudyPlan(item.content);
+          }
+        });
       }
 
-      // Fetch chat messages
+      // Restore AI chat messages
       await fetchMessages(
         conversation.id
       );
-
     } catch (error) {
-      console.log(
-        "SELECT CONVERSATION ERROR:",
+      console.error(
+        "Failed to load conversation:",
         error
-      );
-
-      alert(
-        error.response?.data?.message ||
-          "Failed to open conversation."
       );
     }
   };
 
-  // =========================
   // DELETE CONVERSATION
-  // =========================
-
   const handleDeleteConversation = async (
     conversationId
   ) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this conversation?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     try {
       await api.delete(
         `/conversations/${conversationId}`
@@ -384,34 +280,39 @@ function Dashboard() {
         selectedConversation?.id ===
         conversationId
       ) {
-        handleNewConversation();
+        setSelectedConversation(null);
+        setTopic("");
+        setDifficulty("Beginner");
+
+        clearCurrentContent();
       }
 
+      setDeleteTarget(null);
     } catch (error) {
-      console.log(
-        "DELETE CONVERSATION ERROR:",
+      console.error(
+        "Failed to delete conversation:",
         error
       );
 
       alert(
-        error.response?.data?.message ||
-          "Failed to delete conversation."
+        "Failed to delete conversation."
       );
     }
   };
 
-  // =========================
   // EXPLAIN TOPIC
-  // =========================
-
   const handleExplain = async () => {
     if (!topic.trim()) {
-      alert("Please enter a topic.");
+      alert(
+        "Please enter a topic first."
+      );
+
       return;
     }
 
     try {
-      setLoading(true);
+      // Only Explain Topic becomes Loading...
+      setLoading("explain");
 
       const conversation =
         await getOrCreateConversation(
@@ -421,15 +322,13 @@ function Dashboard() {
       const response = await api.post(
         "/ai/explain",
         {
-          topic: topic.trim(),
+          topic,
           difficulty,
           conversationId:
             conversation.id,
         }
       );
 
-      // IMPORTANT:
-      // Backend returns { explanation: ... }
       setResult(
         response.data.explanation
       );
@@ -439,41 +338,35 @@ function Dashboard() {
       );
 
       await fetchConversations();
-      await fetchHistory();
-
     } catch (error) {
-      console.log(
-        "EXPLAIN ERROR:",
+      console.error(
+        "Explain error:",
         error
       );
 
-      console.log(
-        "EXPLAIN ERROR RESPONSE:",
-        error.response?.data
-      );
-
       alert(
-        error.response?.data?.message ||
-          "Failed to generate explanation."
+        error.response?.data
+          ?.message ||
+          "Something went wrong while generating the explanation."
       );
-
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
-  // =========================
   // GENERATE NOTES
-  // =========================
-
   const handleNotes = async () => {
     if (!topic.trim()) {
-      alert("Please enter a topic.");
+      alert(
+        "Please enter a topic first."
+      );
+
       return;
     }
 
     try {
-      setLoading(true);
+      // Only Generate Notes becomes Loading...
+      setLoading("notes");
 
       const conversation =
         await getOrCreateConversation(
@@ -483,15 +376,13 @@ function Dashboard() {
       const response = await api.post(
         "/ai/notes",
         {
-          topic: topic.trim(),
+          topic,
           difficulty,
           conversationId:
             conversation.id,
         }
       );
 
-      // IMPORTANT:
-      // Backend returns { notes: ... }
       setNotes(
         response.data.notes
       );
@@ -499,41 +390,35 @@ function Dashboard() {
       setSelectedContent("notes");
 
       await fetchConversations();
-      await fetchHistory();
-
     } catch (error) {
-      console.log(
-        "NOTES ERROR:",
+      console.error(
+        "Notes error:",
         error
       );
 
-      console.log(
-        "NOTES ERROR RESPONSE:",
-        error.response?.data
-      );
-
       alert(
-        error.response?.data?.message ||
-          "Failed to generate notes."
+        error.response?.data
+          ?.message ||
+          "Something went wrong while generating notes."
       );
-
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
-  // =========================
   // GENERATE QUIZ
-  // =========================
-
   const handleQuiz = async () => {
     if (!topic.trim()) {
-      alert("Please enter a topic.");
+      alert(
+        "Please enter a topic first."
+      );
+
       return;
     }
 
     try {
-      setLoading(true);
+      // Only Generate Quiz becomes Loading...
+      setLoading("quiz");
 
       const conversation =
         await getOrCreateConversation(
@@ -543,15 +428,13 @@ function Dashboard() {
       const response = await api.post(
         "/ai/quiz",
         {
-          topic: topic.trim(),
+          topic,
           difficulty,
           conversationId:
             conversation.id,
         }
       );
 
-      // IMPORTANT:
-      // Backend returns { quiz: ... }
       setQuiz(
         response.data.quiz
       );
@@ -559,41 +442,35 @@ function Dashboard() {
       setSelectedContent("quiz");
 
       await fetchConversations();
-      await fetchHistory();
-
     } catch (error) {
-      console.log(
-        "QUIZ ERROR:",
+      console.error(
+        "Quiz error:",
         error
       );
 
-      console.log(
-        "QUIZ ERROR RESPONSE:",
-        error.response?.data
-      );
-
       alert(
-        error.response?.data?.message ||
-          "Failed to generate quiz."
+        error.response?.data
+          ?.message ||
+          "Something went wrong while generating the quiz."
       );
-
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
-  // =========================
   // GENERATE STUDY PLAN
-  // =========================
-
   const handleStudyPlan = async () => {
     if (!topic.trim()) {
-      alert("Please enter a topic.");
+      alert(
+        "Please enter a topic first."
+      );
+
       return;
     }
 
     try {
-      setLoading(true);
+      // Only Study Plan becomes Loading...
+      setLoading("studyPlan");
 
       const conversation =
         await getOrCreateConversation(
@@ -603,15 +480,13 @@ function Dashboard() {
       const response = await api.post(
         "/ai/study-plan",
         {
-          topic: topic.trim(),
+          topic,
           difficulty,
           conversationId:
             conversation.id,
         }
       );
 
-      // IMPORTANT:
-      // Backend returns { studyPlan: ... }
       setStudyPlan(
         response.data.studyPlan
       );
@@ -621,70 +496,56 @@ function Dashboard() {
       );
 
       await fetchConversations();
-      await fetchHistory();
-
     } catch (error) {
-      console.log(
-        "STUDY PLAN ERROR:",
+      console.error(
+        "Study plan error:",
         error
       );
 
-      console.log(
-        "STUDY PLAN ERROR RESPONSE:",
-        error.response?.data
-      );
-
       alert(
-        error.response?.data?.message ||
-          "Failed to generate study plan."
+        error.response?.data
+          ?.message ||
+          "Something went wrong while generating the study plan."
       );
-
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
-  // =========================
   // SEND CHAT MESSAGE
-  // =========================
-
   const handleSendMessage = async (
     event
   ) => {
-    if (event) {
-      event.preventDefault();
-    }
+    event.preventDefault();
 
-    const currentMessage =
-      chatMessage.trim();
-
-    if (!currentMessage) {
+    if (
+      !chatMessage.trim() ||
+      chatLoading
+    ) {
       return;
     }
 
-    const temporaryMessageId =
-      Date.now();
+    const messageText =
+      chatMessage.trim();
 
     try {
       setChatLoading(true);
 
       const conversation =
         await getOrCreateConversation(
-          currentMessage
+          messageText
         );
 
-      const temporaryUserMessage = {
-        id: temporaryMessageId,
+      const temporaryMessage = {
+        id: `temp-${Date.now()}`,
         role: "user",
-        content: currentMessage,
+        content: messageText,
       };
 
-      setChatMessages(
-        (previous) => [
-          ...previous,
-          temporaryUserMessage,
-        ]
-      );
+      setChatMessages((previous) => [
+        ...previous,
+        temporaryMessage,
+      ]);
 
       setChatMessage("");
 
@@ -693,913 +554,985 @@ function Dashboard() {
         {
           conversationId:
             conversation.id,
-          message: currentMessage,
-          difficulty,
+          message: messageText,
         }
       );
 
       const assistantMessage = {
-        id: `${Date.now()}-assistant`,
+        id:
+          response.data.id ||
+          `assistant-${Date.now()}`,
+
         role: "assistant",
+
         content:
+          response.data.response ||
           response.data.message,
       };
 
-      setChatMessages(
-        (previous) => [
-          ...previous,
-          assistantMessage,
-        ]
-      );
+      setChatMessages((previous) => [
+        ...previous,
+        assistantMessage,
+      ]);
 
       await fetchConversations();
-
     } catch (error) {
-      console.log(
-        "CHAT ERROR:",
+      console.error(
+        "Chat error:",
         error
       );
 
-      console.log(
-        "CHAT ERROR RESPONSE:",
-        error.response?.data
-      );
-
-      console.log(
-        "CHAT ERROR STATUS:",
-        error.response?.status
-      );
-
-      // Remove temporary user message
-      setChatMessages(
-        (previous) =>
-          previous.filter(
-            (message) =>
-              message.id !==
-              temporaryMessageId
-          )
+      setChatMessages((previous) =>
+        previous.filter(
+          (message) =>
+            !String(
+              message.id
+            ).startsWith("temp-")
+        )
       );
 
       alert(
-        error.response?.data?.message ||
-          "Failed to send message."
+        error.response?.data
+          ?.message ||
+          "Something went wrong while sending your message."
       );
-
     } finally {
       setChatLoading(false);
     }
   };
 
-  // =========================
-  // VIEW HISTORY ITEM
-  // =========================
-
-  const handleViewHistory = (item) => {
-    setSelectedContent(
-      item.content_type
-    );
-
-    if (
-      item.content_type ===
-      "explanation"
-    ) {
-      setResult(item.content);
-    }
-
-    if (
-      item.content_type === "notes"
-    ) {
-      setNotes(item.content);
-    }
-
-    if (
-      item.content_type === "quiz"
-    ) {
-      setQuiz(item.content);
-    }
-
-    if (
-      item.content_type ===
-      "studyPlan"
-    ) {
-      setStudyPlan(item.content);
-    }
-
-    setTopic(item.topic || "");
-
-    setDifficulty(
-      item.difficulty || "Beginner"
-    );
-  };
-
-  // =========================
-  // DELETE HISTORY ITEM
-  // =========================
-
-  const handleDeleteHistory = async (
-    historyId
-  ) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this history item?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await api.delete(
-        `/study/history/${historyId}`
-      );
-
-      setHistory((previous) =>
-        previous.filter(
-          (item) =>
-            item.id !== historyId
-        )
-      );
-
-    } catch (error) {
-      console.log(
-        "DELETE HISTORY ERROR:",
-        error
-      );
-
-      alert(
-        error.response?.data?.message ||
-          "Failed to delete history item."
-      );
-    }
-  };
-
-  // =========================
   // LOGOUT
-  // =========================
-
   const handleLogout = () => {
     localStorage.removeItem("token");
 
     navigate("/");
   };
 
-  // =========================
-  // UI
-  // =========================
+  // FORMAT INLINE MARKDOWN
+  // FORMAT INLINE MARKDOWN
+const formatInlineText = (text) => {
+  const parts = [];
+
+  let remaining = text;
+
+  const markdownRegex =
+    /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/;
+
+  while (remaining.length > 0) {
+    const match =
+      remaining.match(markdownRegex);
+
+    if (!match) {
+      parts.push(
+        <span key={parts.length}>
+          {remaining}
+        </span>
+      );
+
+      break;
+    }
+
+    const matchIndex =
+      match.index;
+
+    if (matchIndex > 0) {
+      parts.push(
+        <span key={parts.length}>
+          {remaining.substring(
+            0,
+            matchIndex
+          )}
+        </span>
+      );
+    }
+
+    if (
+      match[1].startsWith("**")
+    ) {
+      parts.push(
+        <strong key={parts.length}>
+          {match[2]}
+        </strong>
+      );
+    } else if (
+      match[1].startsWith("*")
+    ) {
+      parts.push(
+        <em key={parts.length}>
+          {match[3]}
+        </em>
+      );
+    } else if (
+      match[1].startsWith("`")
+    ) {
+      parts.push(
+        <code
+          key={parts.length}
+          className="inline-code"
+        >
+          {match[4]}
+        </code>
+      );
+    }
+
+    remaining =
+      remaining.substring(
+        matchIndex +
+          match[0].length
+      );
+  }
+
+  return parts;
+};
+
+  // FORMAT AI CONTENT
+  const formatAIContent = (
+    content
+  ) => {
+    if (!content) {
+      return null;
+    }
+
+    const lines =
+      content.split("\n");
+
+    return lines.map(
+      (line, index) => {
+        const trimmedLine =
+          line.trim();
+
+        if (!trimmedLine) {
+          return (
+            <div
+              key={index}
+              className="content-space"
+            />
+          );
+        }
+
+        if (
+          trimmedLine.startsWith(
+            "# "
+          )
+        ) {
+          return (
+            <h2
+              key={index}
+              className="content-heading-main"
+            >
+              {formatInlineText(
+                trimmedLine.replace(
+                  /^#\s+/,
+                  ""
+                )
+              )}
+            </h2>
+          );
+        }
+
+        if (
+          trimmedLine.startsWith(
+            "## "
+          )
+        ) {
+          return (
+            <h3
+              key={index}
+              className="content-heading"
+            >
+              {formatInlineText(
+                trimmedLine.replace(
+                  /^##\s+/,
+                  ""
+                )
+              )}
+            </h3>
+          );
+        }
+
+        if (
+          trimmedLine.startsWith(
+            "### "
+          )
+        ) {
+          return (
+            <h4
+              key={index}
+              className="content-heading-small"
+            >
+              {formatInlineText(
+                trimmedLine.replace(
+                  /^###\s+/,
+                  ""
+                )
+              )}
+            </h4>
+          );
+        }
+
+        if (
+          /^[-*•]\s+/.test(
+            trimmedLine
+          )
+        ) {
+          return (
+            <div
+              key={index}
+              className="content-bullet"
+            >
+              <span className="bullet-dot">
+                •
+              </span>
+
+              <span>
+                {formatInlineText(
+                  trimmedLine.replace(
+                    /^[-*•]\s+/,
+                    ""
+                  )
+                )}
+              </span>
+            </div>
+          );
+        }
+
+        const numberedMatch =
+          trimmedLine.match(
+            /^(\d+)[.)]\s+(.*)$/
+          );
+
+        if (numberedMatch) {
+          return (
+            <div
+              key={index}
+              className="content-numbered"
+            >
+              <span className="number-badge">
+                {numberedMatch[1]}
+              </span>
+
+              <span>
+                {formatInlineText(
+                  numberedMatch[2]
+                )}
+              </span>
+            </div>
+          );
+        }
+
+        return (
+          <p
+            key={index}
+            className="content-paragraph"
+          >
+            {formatInlineText(
+              trimmedLine
+            )}
+          </p>
+        );
+      }
+    );
+  };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        fontFamily:
-          "Arial, sans-serif",
-        backgroundColor: "#f5f7fb",
-      }}
-    >
-      {/* =========================
-          SIDEBAR
-      ========================= */}
+    <div className="dashboard-shell">
+      {sidebarOpen && (
+        <button
+          className="sidebar-overlay"
+          onClick={() =>
+            setSidebarOpen(false)
+          }
+          aria-label="Close navigation"
+        />
+      )}
 
       <aside
-        style={{
-          width: "280px",
-          backgroundColor: "#111827",
-          color: "white",
-          padding: "20px",
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-        }}
+        className={`sidebar ${
+          sidebarOpen
+            ? "sidebar-open"
+            : ""
+        }`}
       >
-        <h2
-          style={{
-            marginTop: 0,
-            marginBottom: "20px",
-          }}
-        >
-          AI Study Assistant
-        </h2>
+        <div className="sidebar-top">
+          <div className="sidebar-brand">
+            <div className="brand-icon">
+              AI
+            </div>
 
-        {/* NEW STUDY */}
+            <div className="brand-text">
+              <h2>
+                AI Study Assistant
+              </h2>
 
-        <button
-          onClick={
-            handleNewConversation
-          }
-          style={{
-            padding: "12px",
-            border: "none",
-            borderRadius: "8px",
-            backgroundColor: "#2563eb",
-            color: "white",
-            cursor: "pointer",
-            marginBottom: "20px",
-            fontSize: "15px",
-          }}
-        >
-          + New Study
-        </button>
+              <span>
+                Your personal study
+                space
+              </span>
+            </div>
 
-        {/* CONVERSATIONS */}
-
-        <h3
-          style={{
-            fontSize: "14px",
-            color: "#9ca3af",
-            marginBottom: "10px",
-          }}
-        >
-          Conversations
-        </h3>
-
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-          }}
-        >
-          {conversations.length ===
-          0 ? (
-            <p
-              style={{
-                color: "#9ca3af",
-                fontSize: "14px",
-              }}
+            <button
+              className="sidebar-close"
+              onClick={() =>
+                setSidebarOpen(false)
+              }
+              aria-label="Close sidebar"
             >
-              No conversations yet.
-            </p>
-          ) : (
-            conversations.map(
-              (conversation) => (
-                <div
-                  key={
-                    conversation.id
-                  }
-                  style={{
-                    marginBottom:
-                      "8px",
-                  }}
-                >
-                  <button
-                    onClick={() =>
-                      handleSelectConversation(
-                        conversation
-                      )
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "10px",
-                      textAlign: "left",
-                      border: "none",
-                      borderRadius:
-                        "6px",
-                      backgroundColor:
+              ×
+            </button>
+          </div>
+
+          <button
+            className="new-study-button"
+            onClick={
+              handleNewConversation
+            }
+            disabled={
+              loading !== null ||
+              chatLoading
+            }
+          >
+            <span className="new-study-icon">
+              +
+            </span>
+
+            <span>New Study</span>
+          </button>
+
+          <div className="conversation-section">
+            <div className="section-label">
+              Conversations
+            </div>
+
+            <div className="conversation-list">
+              {conversations.length ===
+              0 ? (
+                <div className="empty-conversations">
+                  <div className="empty-icon">
+                    💬
+                  </div>
+
+                  <p>
+                    No conversations
+                    yet.
+                  </p>
+
+                  <span>
+                    Start a study
+                    session to see it
+                    here.
+                  </span>
+                </div>
+              ) : (
+                conversations.map(
+                  (conversation) => (
+                    <div
+                      key={
+                        conversation.id
+                      }
+                      className={`conversation-item ${
                         selectedConversation?.id ===
                         conversation.id
-                          ? "#374151"
-                          : "transparent",
-                      color: "white",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {conversation.title}
-                  </button>
+                          ? "active"
+                          : ""
+                      }`}
+                      onContextMenu={(
+                        event
+                      ) => {
+                        event.preventDefault();
 
-                  <button
-                    onClick={() =>
-                      handleDeleteConversation(
-                        conversation.id
-                      )
-                    }
-                    style={{
-                      marginTop: "4px",
-                      padding:
-                        "5px 8px",
-                      border: "none",
-                      borderRadius:
-                        "5px",
-                      backgroundColor:
-                        "#dc2626",
-                      color: "white",
-                      cursor: "pointer",
-                      fontSize:
-                        "12px",
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )
-            )
-          )}
+                        setDeleteTarget(
+                          conversation
+                        );
+                      }}
+                    >
+                      <button
+                        className="conversation-button"
+                        onClick={() =>
+                          handleSelectConversation(
+                            conversation
+                          )
+                        }
+                        disabled={
+                          loading !==
+                            null ||
+                          chatLoading
+                        }
+                      >
+                        <span className="conversation-icon">
+                          ▸
+                        </span>
+
+                        <span className="conversation-title">
+                          {
+                            conversation.title
+                          }
+                        </span>
+                      </button>
+
+                      <button
+                        className="conversation-delete"
+                        onClick={(
+                          event
+                        ) => {
+                          event.stopPropagation();
+
+                          setDeleteTarget(
+                            conversation
+                          );
+                        }}
+                        title="Delete conversation"
+                        aria-label={`Delete ${conversation.title}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )
+                )
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* LOGOUT */}
-
-        <button
-          onClick={handleLogout}
-          style={{
-            marginTop: "20px",
-            padding: "10px",
-            border: "1px solid #6b7280",
-            borderRadius: "8px",
-            backgroundColor:
-              "transparent",
-            color: "white",
-            cursor: "pointer",
-          }}
-        >
-          Logout
-        </button>
+        <div className="sidebar-footer">
+          <button
+            className="logout-button"
+            onClick={
+              handleLogout
+            }
+          >
+            <span>↪</span>
+            Logout
+          </button>
+        </div>
       </aside>
 
-      {/* =========================
-          MAIN CONTENT
-      ========================= */}
-
-      <main
-        style={{
-          flex: 1,
-          padding: "30px",
-          boxSizing: "border-box",
-          overflowY: "auto",
-        }}
-      >
-        <h1>
-          Study Dashboard
-        </h1>
-
-        <p
-          style={{
-            color: "#6b7280",
-          }}
-        >
-          Learn, revise, and practice
-          with your AI Study Assistant.
-        </p>
-
-        {/* =========================
-            TOPIC INPUT
-        ========================= */}
-
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "20px",
-            borderRadius: "12px",
-            marginTop: "20px",
-            boxShadow:
-              "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <label
-            style={{
-              display: "block",
-              marginBottom: "8px",
-              fontWeight: "bold",
-            }}
-          >
-            Topic
-          </label>
-
-          <input
-            type="text"
-            value={topic}
-            onChange={(event) =>
-              setTopic(
-                event.target.value
-              )
-            }
-            placeholder="Enter a topic..."
-            style={{
-              width: "100%",
-              padding: "12px",
-              boxSizing: "border-box",
-              border:
-                "1px solid #d1d5db",
-              borderRadius: "8px",
-              fontSize: "15px",
-            }}
-          />
-
-          <label
-            style={{
-              display: "block",
-              marginTop: "15px",
-              marginBottom: "8px",
-              fontWeight: "bold",
-            }}
-          >
-            Difficulty
-          </label>
-
-          <select
-            value={difficulty}
-            onChange={(event) =>
-              setDifficulty(
-                event.target.value
-              )
-            }
-            style={{
-              padding: "10px",
-              border:
-                "1px solid #d1d5db",
-              borderRadius: "8px",
-              fontSize: "15px",
-            }}
-          >
-            <option value="Beginner">
-              Beginner
-            </option>
-
-            <option value="Intermediate">
-              Intermediate
-            </option>
-
-            <option value="Advanced">
-              Advanced
-            </option>
-          </select>
-
-          {/* =========================
-              AI ACTION BUTTONS
-          ========================= */}
-
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "10px",
-              marginTop: "20px",
-            }}
-          >
+      <main className="dashboard-main">
+        <div className="dashboard-content">
+          <div className="mobile-topbar">
             <button
-              onClick={handleExplain}
-              disabled={loading}
-              style={{
-                padding: "10px 15px",
-                border: "none",
-                borderRadius: "8px",
-                backgroundColor:
-                  "#2563eb",
-                color: "white",
-                cursor: loading
-                  ? "not-allowed"
-                  : "pointer",
-              }}
-            >
-              {loading
-                ? "Loading..."
-                : "Explain Topic"}
-            </button>
-
-            <button
-              onClick={handleNotes}
-              disabled={loading}
-              style={{
-                padding: "10px 15px",
-                border: "none",
-                borderRadius: "8px",
-                backgroundColor:
-                  "#059669",
-                color: "white",
-                cursor: loading
-                  ? "not-allowed"
-                  : "pointer",
-              }}
-            >
-              {loading
-                ? "Loading..."
-                : "Generate Notes"}
-            </button>
-
-            <button
-              onClick={handleQuiz}
-              disabled={loading}
-              style={{
-                padding: "10px 15px",
-                border: "none",
-                borderRadius: "8px",
-                backgroundColor:
-                  "#7c3aed",
-                color: "white",
-                cursor: loading
-                  ? "not-allowed"
-                  : "pointer",
-              }}
-            >
-              {loading
-                ? "Loading..."
-                : "Generate Quiz"}
-            </button>
-
-            <button
-              onClick={
-                handleStudyPlan
+              className="menu-button"
+              onClick={() =>
+                setSidebarOpen(true)
               }
-              disabled={loading}
-              style={{
-                padding: "10px 15px",
-                border: "none",
-                borderRadius: "8px",
-                backgroundColor:
-                  "#ea580c",
-                color: "white",
-                cursor: loading
-                  ? "not-allowed"
-                  : "pointer",
-              }}
+              aria-label="Open conversations"
             >
-              {loading
-                ? "Loading..."
-                : "Study Plan"}
+              ☰
             </button>
-          </div>
-        </div>
 
-        {/* =========================
-            CHAT
-        ========================= */}
+            <div className="mobile-brand">
+              <div className="mobile-brand-icon">
+                AI
+              </div>
 
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "20px",
-            borderRadius: "12px",
-            marginTop: "20px",
-            boxShadow:
-              "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <h2>AI Chat</h2>
-
-          <div
-            style={{
-              maxHeight: "400px",
-              overflowY: "auto",
-              marginBottom: "15px",
-            }}
-          >
-            {chatMessages.length ===
-            0 ? (
-              <p
-                style={{
-                  color: "#6b7280",
-                }}
-              >
-                Ask anything about
-                your studies.
-              </p>
-            ) : (
-              chatMessages.map(
-                (message) => (
-                  <div
-                    key={message.id}
-                    style={{
-                      marginBottom:
-                        "12px",
-                      padding: "12px",
-                      borderRadius:
-                        "8px",
-                      backgroundColor:
-                        message.role ===
-                        "user"
-                          ? "#dbeafe"
-                          : "#f3f4f6",
-                    }}
-                  >
-                    <strong>
-                      {message.role ===
-                      "user"
-                        ? "You"
-                        : "AI"}
-                    </strong>
-
-                    <p
-                      style={{
-                        whiteSpace:
-                          "pre-wrap",
-                        marginBottom: 0,
-                      }}
-                    >
-                      {
-                        message.content
-                      }
-                    </p>
-                  </div>
-                )
-              )
-            )}
-
-            {chatLoading && (
-              <p
-                style={{
-                  color: "#6b7280",
-                }}
-              >
-                AI is thinking...
-              </p>
-            )}
-          </div>
-
-          <form
-            onSubmit={
-              handleSendMessage
-            }
-            style={{
-              display: "flex",
-              gap: "10px",
-            }}
-          >
-            <input
-              type="text"
-              value={chatMessage}
-              onChange={(event) =>
-                setChatMessage(
-                  event.target.value
-                )
-              }
-              placeholder="Ask a question..."
-              style={{
-                flex: 1,
-                padding: "12px",
-                border:
-                  "1px solid #d1d5db",
-                borderRadius: "8px",
-              }}
-            />
-
-            <button
-              type="submit"
-              disabled={chatLoading}
-              style={{
-                padding:
-                  "10px 18px",
-                border: "none",
-                borderRadius: "8px",
-                backgroundColor:
-                  "#2563eb",
-                color: "white",
-                cursor:
-                  chatLoading
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              Send
-            </button>
-          </form>
-        </div>
-
-        {/* =========================
-            GENERATED EXPLANATION
-        ========================= */}
-
-        {result && (
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "20px",
-              borderRadius: "12px",
-              marginTop: "20px",
-              boxShadow:
-                "0 2px 8px rgba(0,0,0,0.08)",
-            }}
-          >
-            <h2>
-              Explanation
-            </h2>
-
-            <div
-              style={{
-                whiteSpace:
-                  "pre-wrap",
-              }}
-            >
-              {result}
+              <span>
+                AI Study Assistant
+              </span>
             </div>
           </div>
-        )}
 
-        {/* =========================
-            GENERATED NOTES
-        ========================= */}
-
-        {notes && (
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "20px",
-              borderRadius: "12px",
-              marginTop: "20px",
-              boxShadow:
-                "0 2px 8px rgba(0,0,0,0.08)",
-            }}
-          >
-            <h2>
-              Study Notes
-            </h2>
-
-            <div
-              style={{
-                whiteSpace:
-                  "pre-wrap",
-              }}
-            >
-              {notes}
+          <header className="dashboard-header">
+            <div className="welcome-label">
+              YOUR STUDY SPACE
             </div>
-          </div>
-        )}
 
-        {/* =========================
-            GENERATED QUIZ
-        ========================= */}
+            <h1>
+              {selectedConversation
+                ? selectedConversation.title
+                : "Study Dashboard"}
+            </h1>
 
-        {quiz && (
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "20px",
-              borderRadius: "12px",
-              marginTop: "20px",
-              boxShadow:
-                "0 2px 8px rgba(0,0,0,0.08)",
-            }}
-          >
-            <h2>
-              Quiz
-            </h2>
-
-            <div
-              style={{
-                whiteSpace:
-                  "pre-wrap",
-              }}
-            >
-              {quiz}
-            </div>
-          </div>
-        )}
-
-        {/* =========================
-            GENERATED STUDY PLAN
-        ========================= */}
-
-        {studyPlan && (
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "20px",
-              borderRadius: "12px",
-              marginTop: "20px",
-              boxShadow:
-                "0 2px 8px rgba(0,0,0,0.08)",
-            }}
-          >
-            <h2>
-              Study Plan
-            </h2>
-
-            <div
-              style={{
-                whiteSpace:
-                  "pre-wrap",
-              }}
-            >
-              {studyPlan}
-            </div>
-          </div>
-        )}
-
-        {/* =========================
-            STUDY HISTORY
-        ========================= */}
-
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "20px",
-            borderRadius: "12px",
-            marginTop: "20px",
-            marginBottom: "30px",
-            boxShadow:
-              "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <h2>
-            Study History
-          </h2>
-
-          {history.length === 0 ? (
-            <p
-              style={{
-                color: "#6b7280",
-              }}
-            >
-              No study history yet.
+            <p>
+              Learn, revise, and
+              practice with your AI
+              Study Assistant.
             </p>
-          ) : (
-            history.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  padding: "15px",
-                  border:
-                    "1px solid #e5e7eb",
-                  borderRadius: "8px",
-                  marginBottom:
-                    "10px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent:
-                      "space-between",
-                    alignItems:
-                      "center",
-                    gap: "10px",
-                  }}
+          </header>
+
+          <section className="study-card">
+            <div className="card-heading">
+              <div className="card-heading-icon">
+                ✦
+              </div>
+
+              <div>
+                <h2>
+                  What are you
+                  studying?
+                </h2>
+
+                <p>
+                  Choose a topic and
+                  let your AI assistant
+                  help you learn.
+                </p>
+              </div>
+            </div>
+
+            <div className="study-form">
+              <div className="form-group topic-group">
+                <label htmlFor="study-topic">
+                  Topic
+                </label>
+
+                <input
+                  id="study-topic"
+                  type="text"
+                  value={topic}
+                  onChange={(event) =>
+                    setTopic(
+                      event.target
+                        .value
+                    )
+                  }
+                  placeholder="e.g. Operating Systems, React, DBMS..."
+                  disabled={
+                    loading !== null
+                  }
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="study-difficulty">
+                  Difficulty
+                </label>
+
+                <select
+                  id="study-difficulty"
+                  value={difficulty}
+                  onChange={(event) =>
+                    setDifficulty(
+                      event.target
+                        .value
+                    )
+                  }
+                  disabled={
+                    loading !== null
+                  }
                 >
-                  <div>
-                    <strong>
-                      {item.topic}
-                    </strong>
+                  <option value="Beginner">
+                    Beginner
+                  </option>
 
-                    <p
-                      style={{
-                        margin:
-                          "5px 0",
-                        color:
-                          "#6b7280",
-                        fontSize:
-                          "14px",
-                      }}
-                    >
-                      {item.content_type}{" "}
-                      •{" "}
-                      {item.difficulty}
-                    </p>
-                  </div>
+                  <option value="Intermediate">
+                    Intermediate
+                  </option>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                    }}
-                  >
-                    <button
-                      onClick={() =>
-                        handleViewHistory(
-                          item
-                        )
-                      }
-                      style={{
-                        padding:
-                          "7px 10px",
-                        border: "none",
-                        borderRadius:
-                          "6px",
-                        backgroundColor:
-                          "#2563eb",
-                        color:
-                          "white",
-                        cursor:
-                          "pointer",
-                      }}
-                    >
-                      View
-                    </button>
+                  <option value="Advanced">
+                    Advanced
+                  </option>
+                </select>
+              </div>
+            </div>
 
-                    <button
-                      onClick={() =>
-                        handleDeleteHistory(
-                          item.id
-                        )
-                      }
-                      style={{
-                        padding:
-                          "7px 10px",
-                        border: "none",
-                        borderRadius:
-                          "6px",
-                        backgroundColor:
-                          "#dc2626",
-                        color:
-                          "white",
-                        cursor:
-                          "pointer",
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+            <div className="ai-actions">
+              <button
+                className="ai-action primary"
+                onClick={
+                  handleExplain
+                }
+                disabled={
+                  loading !== null
+                }
+              >
+                <span className="action-icon">
+                  ✦
+                </span>
+
+                {loading ===
+                "explain"
+                  ? "Loading..."
+                  : "Explain Topic"}
+              </button>
+
+              <button
+                className="ai-action green"
+                onClick={
+                  handleNotes
+                }
+                disabled={
+                  loading !== null
+                }
+              >
+                <span className="action-icon">
+                  ▤
+                </span>
+
+                {loading === "notes"
+                  ? "Loading..."
+                  : "Generate Notes"}
+              </button>
+
+              <button
+                className="ai-action purple"
+                onClick={
+                  handleQuiz
+                }
+                disabled={
+                  loading !== null
+                }
+              >
+                <span className="action-icon">
+                  ✓
+                </span>
+
+                {loading === "quiz"
+                  ? "Loading..."
+                  : "Generate Quiz"}
+              </button>
+
+              <button
+                className="ai-action orange"
+                onClick={
+                  handleStudyPlan
+                }
+                disabled={
+                  loading !== null
+                }
+              >
+                <span className="action-icon">
+                  ◫
+                </span>
+
+                {loading ===
+                "studyPlan"
+                  ? "Loading..."
+                  : "Study Plan"}
+              </button>
+            </div>
+          </section>
+
+          <section className="chat-card">
+            <div className="chat-header">
+              <div className="chat-title-wrapper">
+                <div className="chat-icon">
+                  AI
+                </div>
+
+                <div>
+                  <h2>AI Chat</h2>
+
+                  <p>
+                    Ask follow-up
+                    questions about
+                    what you're
+                    learning.
+                  </p>
                 </div>
               </div>
-            ))
+
+              <div className="chat-status">
+                <span className="status-dot"></span>
+                AI Assistant
+              </div>
+            </div>
+
+            <div className="chat-messages">
+              {chatMessages.length ===
+              0 ? (
+                <div className="chat-empty">
+                  <div className="chat-empty-icon">
+                    ✦
+                  </div>
+
+                  <h3>
+                    Start a
+                    conversation
+                  </h3>
+
+                  <p>
+                    Ask a question about
+                    your topic, request
+                    an example, or clear
+                    up something you find
+                    difficult.
+                  </p>
+                </div>
+              ) : (
+                chatMessages.map(
+                  (message) => (
+                    <div
+                      key={
+                        message.id
+                      }
+                      className={`chat-message ${
+                        message.role ===
+                        "user"
+                          ? "user-message"
+                          : "assistant-message"
+                      }`}
+                    >
+                      <div className="message-avatar">
+                        {message.role ===
+                        "user"
+                          ? "YOU"
+                          : "AI"}
+                      </div>
+
+                      <div className="message-body">
+                        <div className="message-name">
+                          {message.role ===
+                          "user"
+                            ? "You"
+                            : "AI Assistant"}
+                        </div>
+
+                        <div className="message-content">
+                          {message.role ===
+                          "assistant"
+                            ? formatAIContent(
+                                message.content
+                              )
+                            : message.content}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )
+              )}
+
+              {chatLoading && (
+                <div className="chat-message assistant-message">
+                  <div className="message-avatar">
+                    AI
+                  </div>
+
+                  <div className="message-body">
+                    <div className="message-name">
+                      AI Assistant
+                    </div>
+
+                    <div className="typing-indicator">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form
+              className="chat-input-wrapper"
+              onSubmit={
+                handleSendMessage
+              }
+            >
+              <input
+                type="text"
+                value={chatMessage}
+                onChange={(event) =>
+                  setChatMessage(
+                    event.target.value
+                  )
+                }
+                placeholder="Ask a question about your studies..."
+                disabled={
+                  loading !== null
+                }
+              />
+
+              <button
+                className="send-button"
+                type="submit"
+                disabled={
+                  chatLoading ||
+                  loading !== null ||
+                  !chatMessage.trim()
+                }
+              >
+                <span>Send</span>
+                <span>➤</span>
+              </button>
+            </form>
+          </section>
+
+          {result && (
+            <section
+              className={`content-card ${
+                selectedContent ===
+                "explanation"
+                  ? "selected-content"
+                  : ""
+              }`}
+            >
+              <div className="content-card-header">
+                <div className="content-icon explanation-icon">
+                  ✦
+                </div>
+
+                <div>
+                  <span className="content-label">
+                    LEARN
+                  </span>
+
+                  <h2>
+                    Explanation
+                  </h2>
+                </div>
+              </div>
+
+              <div className="content-body">
+                {formatAIContent(
+                  result
+                )}
+              </div>
+            </section>
+          )}
+
+          {notes && (
+            <section
+              className={`content-card ${
+                selectedContent ===
+                "notes"
+                  ? "selected-content"
+                  : ""
+              }`}
+            >
+              <div className="content-card-header">
+                <div className="content-icon notes-icon">
+                  ▤
+                </div>
+
+                <div>
+                  <span className="content-label">
+                    REVISE
+                  </span>
+
+                  <h2>
+                    Study Notes
+                  </h2>
+                </div>
+              </div>
+
+              <div className="content-body">
+                {formatAIContent(
+                  notes
+                )}
+              </div>
+            </section>
+          )}
+
+          {quiz && (
+            <section
+              className={`content-card ${
+                selectedContent ===
+                "quiz"
+                  ? "selected-content"
+                  : ""
+              }`}
+            >
+              <div className="content-card-header">
+                <div className="content-icon quiz-icon">
+                  ✓
+                </div>
+
+                <div>
+                  <span className="content-label">
+                    PRACTICE
+                  </span>
+
+                  <h2>Quiz</h2>
+                </div>
+              </div>
+
+              <div className="content-body">
+                {formatAIContent(
+                  quiz
+                )}
+              </div>
+            </section>
+          )}
+
+          {studyPlan && (
+            <section
+              className={`content-card ${
+                selectedContent ===
+                "studyPlan"
+                  ? "selected-content"
+                  : ""
+              }`}
+            >
+              <div className="content-card-header">
+                <div className="content-icon plan-icon">
+                  ◫
+                </div>
+
+                <div>
+                  <span className="content-label">
+                    PLAN
+                  </span>
+
+                  <h2>
+                    Study Plan
+                  </h2>
+                </div>
+              </div>
+
+              <div className="content-body">
+                {formatAIContent(
+                  studyPlan
+                )}
+              </div>
+            </section>
           )}
         </div>
       </main>
+
+      {deleteTarget && (
+        <div
+          className="delete-modal-overlay"
+          onClick={() =>
+            setDeleteTarget(null)
+          }
+        >
+          <div
+            className="delete-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="delete-modal-icon">
+              ×
+            </div>
+
+            <h3>
+              Delete conversation?
+            </h3>
+
+            <p>
+              Are you sure you want to
+              delete{" "}
+              <strong>
+                {deleteTarget.title}
+              </strong>
+              ? This action cannot be
+              undone.
+            </p>
+
+            <div className="delete-modal-actions">
+              <button
+                className="delete-cancel-button"
+                onClick={() =>
+                  setDeleteTarget(null)
+                }
+              >
+                Cancel
+              </button>
+
+              <button
+                className="delete-confirm-button"
+                onClick={() =>
+                  handleDeleteConversation(
+                    deleteTarget.id
+                  )
+                }
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,11 +7,11 @@ const ai = new GoogleGenAI({
 
 
 // =========================
-// GEMINI GENERATION WITH RETRY
+// GEMINI GENERATION WITH FAST RETRY
 // =========================
 
 const generateWithRetry = async (prompt) => {
-  const maxAttempts = 3;
+  const maxAttempts = 2;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -30,12 +30,12 @@ const generateWithRetry = async (prompt) => {
       }
 
       console.log(
-        `Gemini service is busy. Retrying... Attempt ${attempt + 1}/${maxAttempts}`
+        "Gemini service is busy. Retrying once..."
       );
 
-      // Wait 2 seconds before retrying
+      // Short 1-second retry delay
       await new Promise((resolve) =>
-        setTimeout(resolve, 2000)
+        setTimeout(resolve, 1000)
       );
     }
   }
