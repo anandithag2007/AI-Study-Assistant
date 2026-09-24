@@ -621,3 +621,7 @@ Developed as a full-stack AI-powered learning application using React, Node.js, 
 ## License
 
 This project is intended for educational and demonstration purposes.
+
+## AI-Assisted Development
+
+AI-assisted development tools were used during the development of this project for coding guidance, debugging, troubleshooting, documentation assistance, and implementation support. The generated suggestions were reviewed, adapted, integrated, and tested as part of the development process.
