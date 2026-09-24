@@ -30,7 +30,7 @@ Students can enter a topic, select a difficulty level, and use AI to generate ex
 * Ask follow-up questions
 * Conversation-specific chat history
 * Loading and error states
-* Friendly handling of AI API quota errors
+* Handling of AI service and API quota errors
 
 ### Conversation Management
 
@@ -44,7 +44,7 @@ Students can enter a topic, select a difficulty level, and use AI to generate ex
 
 ### Study History
 
-Generated explanations, notes, quizzes, and study plans are stored in the database and associated with the corresponding conversation.
+Generated explanations, notes, quizzes, and study plans are stored in the database and associated with the corresponding conversation and authenticated user.
 
 ### Responsive Interface
 
@@ -122,6 +122,7 @@ The application follows a client-server architecture.
 
 ```text
 AI-Study-Assistant/
+
 │
 ├── backend/
 │   ├── config/
@@ -145,7 +146,6 @@ AI-Study-Assistant/
 │   │   ├── conversationRoutes.js
 │   │   └── studyRoutes.js
 │   │
-│   ├── .env
 │   ├── .gitignore
 │   ├── package.json
 │   └── server.js
@@ -153,10 +153,10 @@ AI-Study-Assistant/
 ├── frontend/
 │   ├── src/
 │   │   ├── assets/
-│   │   │
+│   │
 │   │   ├── components/
 │   │   │   └── ProtectedRoute.jsx
-│   │   │
+│   │
 │   │   ├── pages/
 │   │   │   ├── Dashboard.jsx
 │   │   │   ├── Dashboard.css
@@ -164,10 +164,10 @@ AI-Study-Assistant/
 │   │   │   ├── Login.css
 │   │   │   ├── Register.jsx
 │   │   │   └── Register.css
-│   │   │
+│   │
 │   │   ├── services/
 │   │   │   └── api.js
-│   │   │
+│   │
 │   │   ├── App.jsx
 │   │   ├── App.css
 │   │   ├── index.css
@@ -181,11 +181,18 @@ AI-Study-Assistant/
 └── README.md
 ```
 
+> The backend `.env` file is intentionally not included in the repository structure because it contains sensitive credentials and is excluded from version control.
+
 ## Database
 
 The application uses PostgreSQL for persistent storage.
 
-The database contains tables for user accounts, conversations, messages, and generated study content.
+The database contains four main tables:
+
+* `users`
+* `conversations`
+* `messages`
+* `study_history`
 
 ### Users
 
@@ -193,10 +200,12 @@ Stores registered student accounts and authentication information.
 
 ```text
 users
+
 ├── id
 ├── name
 ├── email
-└── password
+├── password
+└── created_at
 ```
 
 Passwords are stored as hashes rather than plain-text passwords.
@@ -207,24 +216,31 @@ Stores separate study conversations created by users.
 
 ```text
 conversations
+
 ├── id
 ├── user_id
 ├── title
 └── created_at
 ```
 
+Each conversation is associated with the user who created it.
+
 ### Messages
 
-Stores messages belonging to conversations.
+Stores chat messages belonging to conversations.
 
 ```text
 messages
+
 ├── id
 ├── conversation_id
+├── user_id
 ├── role
 ├── content
 └── created_at
 ```
+
+Messages are associated with both the conversation and authenticated user.
 
 ### Study History
 
@@ -232,51 +248,72 @@ Stores AI-generated study content such as explanations, notes, quizzes, and stud
 
 ```text
 study_history
+
 ├── id
 ├── user_id
-├── conversation_id
 ├── topic
+├── difficulty
 ├── content_type
 ├── content
-├── difficulty
-└── created_at
+├── created_at
+└── conversation_id
 ```
 
-Conversation and study data are associated with authenticated users so that users can access their own study history.
+Study history is associated with authenticated users and their conversations so that users can access their own study content.
 
 ## Authentication Flow
 
 ```text
 Student
+
    │
    ▼
+
 Register
+
    │
    ▼
+
 Password hashed with bcrypt
+
    │
    ▼
+
 User stored in PostgreSQL
+
    │
    ▼
+
 Login
+
    │
    ▼
+
 Credentials verified
+
    │
    ▼
+
 JWT token generated
+
    │
    ▼
+
 Token stored by frontend
+
    │
    ▼
+
 Token sent with protected API requests
+
    │
    ▼
+
 Backend verifies token
+
    │
    ▼
+
 Protected resources accessed
 ```
 
@@ -286,25 +323,45 @@ When a student requests an AI-generated study resource:
 
 ```text
 Student enters topic
+
         ↓
+
 Selects difficulty
+
         ↓
+
 Selects an AI study action
+
         ↓
+
 Frontend sends API request
+
         ↓
+
 Express backend receives request
+
         ↓
+
 Prompt is prepared
+
         ↓
+
 Google Gemini API processes request
+
         ↓
+
 AI response returned
+
         ↓
+
 Generated content stored in PostgreSQL
+
         ↓
+
 Response returned to frontend
+
         ↓
+
 Student views the generated content
 ```
 
@@ -314,6 +371,7 @@ Student views the generated content
 
 ```text
 POST /api/auth/register
+
 POST /api/auth/login
 ```
 
@@ -321,8 +379,11 @@ POST /api/auth/login
 
 ```text
 POST /api/ai/explain
+
 POST /api/ai/notes
+
 POST /api/ai/quiz
+
 POST /api/ai/study-plan
 ```
 
@@ -330,22 +391,30 @@ POST /api/ai/study-plan
 
 ```text
 POST /api/chat
-GET  /api/chat/:conversationId
+
+GET /api/chat/:conversationId
 ```
 
 ### Conversations
 
 ```text
 POST   /api/conversations
+
 GET    /api/conversations
+
 GET    /api/conversations/:id
+
 DELETE /api/conversations/:id
 ```
 
 ### Study History
 
 ```text
-GET /api/study
+GET    /api/study/history
+
+GET    /api/study/history/:id
+
+DELETE /api/study/history/:id
 ```
 
 Protected endpoints require a valid JWT authentication token.
@@ -364,8 +433,11 @@ Example:
 
 ```env
 PORT=5000
+
 DATABASE_URL=your_postgresql_connection_string
+
 JWT_SECRET=your_jwt_secret
+
 GEMINI_API_KEY=your_gemini_api_key
 ```
 
@@ -379,6 +451,7 @@ The project uses `.gitignore` rules to prevent environment files and sensitive c
 
 ```bash
 git clone https://github.com/anandithag2007/AI-Study-Assistant.git
+
 cd AI-Study-Assistant
 ```
 
@@ -386,6 +459,7 @@ cd AI-Study-Assistant
 
 ```bash
 cd backend
+
 npm install
 ```
 
@@ -425,6 +499,7 @@ Open another terminal and run:
 
 ```bash
 cd frontend
+
 npm install
 ```
 
@@ -442,6 +517,7 @@ To create a production build of the frontend:
 
 ```bash
 cd frontend
+
 npm run build
 ```
 
@@ -457,10 +533,11 @@ The application handles common errors including:
 * Invalid authentication tokens
 * Failed API requests
 * AI API errors
-* AI usage/quota limits
+* AI service availability issues
+* AI usage and quota limits
 * Loading states during AI operations
 
-When the Gemini API reaches its usage limit, the application displays a user-friendly message instead of exposing the raw API error.
+When AI generation fails because of service availability or usage limits, the application prevents the raw API error from being exposed directly to the user.
 
 ## Security
 
@@ -487,6 +564,12 @@ The following optional bonus features are not currently implemented:
 
 These features can be added in future versions.
 
+### API Quota Limitation
+
+The AI generation features depend on the Gemini API. When the configured API key reaches its available free-tier request quota, new AI generation requests may temporarily fail until the quota becomes available again.
+
+The application handles AI API failures without crashing the backend.
+
 ## Future Enhancements
 
 Possible future improvements include:
@@ -509,8 +592,11 @@ The project uses `.gitignore` rules to prevent files such as the following from 
 
 ```text
 .env
+
 node_modules/
+
 dist/
+
 build/
 ```
 
@@ -522,6 +608,7 @@ The frontend production build can be verified using:
 
 ```bash
 cd frontend
+
 npm run build
 ```
 
